@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qwen-ui-deployment
+  labels:
+    app: qwen-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qwen-ui
+  template:
+    metadata:
+      labels:
+        app: qwen-ui
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101 # Default Nginx unprivileged user UID
+        fsGroup: 101
+      containers:
+      - name: web
+        image: qwen-ui:latest # Update this to your local container registry path in the airgapped system
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false # Nginx unprivileged writes temporary cache files to /tmp
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen-ui-service
+  labels:
+    app: qwen-ui
+spec:
+  type: NodePort # Exposes the service on each Node's IP at a static port
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080 # Access via http://<node-ip>:30080
+    protocol: TCP
+    name: http
+  selector:
+    app: qwen-ui

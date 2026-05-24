@@ -1,0 +1,11 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy files
+COPY package.json mock-server.js ./
+
+# Run server
+EXPOSE 3000
+
+CMD ["node", "mock-server.js"]

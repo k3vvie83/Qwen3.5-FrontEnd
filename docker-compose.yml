@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    container_name: qwen-frontend
+    restart: unless-stopped
+    depends_on:
+      - mock-server
+
+  mock-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    ports:
+      - "3000:3000"
+    container_name: qwen-mock-server
+    restart: unless-stopped

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qwen & Gemini Multi-Modal UI</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i data-lucide="cpu" class="logo-icon"></i>
+          <span>OmniChat VLM</span>
+        </div>
+        <button class="new-chat-btn" id="new-chat-btn">
+          <i data-lucide="plus"></i>
+          <span>New Chat</span>
+        </button>
+      </div>
+
+      <!-- Chat Sessions List -->
+      <div class="sessions-container" id="sessions-container">
+        <!-- Dynmically loaded sessions go here -->
+      </div>
+
+      <!-- Sidebar Footer Actions -->
+      <div class="sidebar-footer">
+        <button class="footer-btn" id="settings-btn" title="Settings">
+          <i data-lucide="settings"></i>
+          <span>Settings</span>
+        </button>
+        <div class="backup-actions">
+          <button class="footer-btn secondary" id="export-btn" title="Export Chat Workspace">
+            <i data-lucide="download"></i>
+            <span>Export</span>
+          </button>
+          <label class="footer-btn secondary" id="import-label" title="Import Chat Workspace">
+            <i data-lucide="upload"></i>
+            <span>Import</span>
+            <input type="file" id="import-input" accept=".json" style="display: none;">
+          </label>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace">
+      <!-- Top Navigation Bar -->
+      <header class="top-bar">
+        <div class="bar-left">
+          <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Sidebar">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="active-chat-info">
+            <h2 id="active-chat-title">New Conversation</h2>
+            <div class="status-indicators">
+              <span class="status-pill" id="model-pill">
+                <i data-lucide="cpu" class="pill-icon"></i>
+                <span id="model-name-display">gemini-2.5-flash</span>
+              </span>
+              <span class="status-pill temp" id="temp-pill">
+                <i data-lucide="thermometer" class="pill-icon"></i>
+                <span id="temp-display">Temp: 0.7</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="bar-right">
+          <!-- Connection Indicator -->
+          <div class="conn-status online" id="conn-status">
+            <span class="indicator-dot"></span>
+            <span id="conn-status-text">Ready</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Message History Container -->
+      <div class="messages-container" id="messages-container">
+        <!-- Welcome Hero screen displayed when conversation is empty -->
+        <div class="welcome-hero" id="welcome-hero">
+          <div class="hero-logo">
+            <i data-lucide="message-square" class="hero-icon"></i>
+          </div>
+          <h1>Welcome to OmniChat VLM</h1>
+          <p>A self-contained multimodal interface designed for Qwen 3.5 VLM, Gemini, and OpenAI-compatible inference servers.</p>
+          
+          <div class="hero-cards">
+            <div class="hero-card" onclick="document.getElementById('chat-input').value = 'Explain the difference between temperature and top-p in LLMs.'; document.getElementById('chat-input').focus();">
+              <h3><i data-lucide="sliders" class="card-icon"></i> Parameters</h3>
+              <p>Fine-tune model outputs like Temperature and penalties in settings.</p>
+            </div>
+            <div class="hero-card" onclick="document.getElementById('chat-input').value = 'Write a python script to parse a Base64 image and send it to an API.'; document.getElementById('chat-input').focus();">
+              <h3><i data-lucide="code" class="card-icon"></i> Code & Markdown</h3>
+              <p>Write prompts and see highlighted source code with built-in copy controls.</p>
+            </div>
+            <div class="hero-card">
+              <h3><i data-lucide="image" class="card-icon"></i> Vision & Video</h3>
+              <p>Attach image or video files directly to prompt multimodal Vision-Language Models.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rendered chat bubble threads go here -->
+        <div class="chat-thread" id="chat-thread"></div>
+      </div>
+
+      <!-- Chat Bottom Input Console -->
+      <footer class="input-console">
+        <div class="input-container-wrapper">
+          
+          <!-- File Attachments Preview Strip -->
+          <div class="attachments-preview-strip" id="attachments-preview-strip" style="display: none;">
+            <!-- Dynmically rendered thumbnails go here -->
+          </div>
+
+          <div class="input-actions-bar">
+            <!-- File upload control -->
+            <label class="icon-btn attachment-btn" id="attach-label" title="Attach image or video">
+              <i data-lucide="paperclip"></i>
+              <input type="file" id="file-input" accept="image/*,video/*" multiple style="display: none;">
+            </label>
+
+            <!-- Input textarea -->
+            <textarea 
+              id="chat-input" 
+              placeholder="Message OmniChat..." 
+              rows="1"
+            ></textarea>
+
+            <!-- Send/Stop Response Button -->
+            <button class="send-btn" id="send-btn" title="Send message">
+              <i data-lucide="send" id="send-icon"></i>
+            </button>
+          </div>
+        </div>
+        <div class="footer-notice">
+          OmniChat is completely self-contained. All conversations are stored locally in your browser.
+        </div>
+      </footer>
+    </main>
+
+    <!-- Settings Overlay Modal -->
+    <div class="modal-overlay" id="settings-modal" style="display: none;">
+      <div class="modal-card">
+        <header class="modal-header">
+          <h2>
+            <i data-lucide="sliders"></i>
+            <span>Configuration & Settings</span>
+          </h2>
+          <button class="close-modal-btn" id="close-settings-btn">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+
+        <div class="modal-body">
+          <!-- API Provider Configuration -->
+          <section class="settings-section">
+            <h3>API Connection Details</h3>
+            <div class="form-group">
+              <label for="provider-select">Provider Preset</label>
+              <select id="provider-select">
+                <option value="gemini">Google AI Studio (Gemini OpenAI Endpoint)</option>
+                <option value="qwen">Qwen / LiteLLM (OpenAI-compatible)</option>
+                <option value="ollama">Ollama (Local - http://localhost:11434)</option>
+                <option value="mock">Local Mock Server (http://localhost:3000)</option>
+                <option value="custom">Custom Endpoint</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="api-url-input">API Base URL</label>
+              <input type="text" id="api-url-input" placeholder="https://api.openai.com/v1">
+            </div>
+
+            <div class="form-group">
+              <label for="api-key-input">API Secret Key</label>
+              <div class="input-with-toggle">
+                <input type="password" id="api-key-input" placeholder="Enter API Token Key">
+                <button type="button" class="field-toggle-btn" id="toggle-key-visibility">
+                  <i data-lucide="eye" id="key-visibility-icon"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="model-name-input">Model Identifier</label>
+              <input type="text" id="model-name-input" placeholder="e.g. gemini-2.5-flash, qwen-vl-plus">
+            </div>
+          </section>
+
+          <!-- Model Generation Hyperparameters -->
+          <section class="settings-section">
+            <h3>Hyperparameters</h3>
+            
+            <div class="slider-group">
+              <div class="slider-labels">
+                <label for="temperature-slider">Temperature</label>
+                <span class="slider-value" id="temperature-val">0.7</span>
+              </div>
+              <input type="range" id="temperature-slider" min="0" max="2" step="0.05" value="0.7">
+              <span class="slider-help">Higher values make responses more creative but less predictable.</span>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-labels">
+                <label for="topp-slider">Top-P (Nucleus Sampling)</label>
+                <span class="slider-value" id="topp-val">0.95</span>
+              </div>
+              <input type="range" id="topp-slider" min="0" max="1" step="0.01" value="0.95">
+              <span class="slider-help">Limits output to words spanning this cumulative probability.</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group half">
+                <label for="max-tokens-input">Max Tokens</label>
+                <input type="number" id="max-tokens-input" value="4096" min="1" max="131072">
+              </div>
+              <div class="form-group half toggle-group">
+                <label for="stream-toggle">Streaming</label>
+                <label class="switch">
+                  <input type="checkbox" id="stream-toggle" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="slider-group half-group">
+                <div class="slider-labels">
+                  <label for="presence-slider">Presence Penalty</label>
+                  <span class="slider-value" id="presence-val">0.0</span>
+                </div>
+                <input type="range" id="presence-slider" min="-2" max="2" step="0.1" value="0">
+              </div>
+              <div class="slider-group half-group">
+                <div class="slider-labels">
+                  <label for="frequency-slider">Frequency Penalty</label>
+                  <span class="slider-value" id="frequency-val">0.0</span>
+                </div>
+                <input type="range" id="frequency-slider" min="-2" max="2" step="0.1" value="0">
+              </div>
+            </div>
+          </section>
+
+          <!-- System Message section -->
+          <section class="settings-section">
+            <h3>System Instruction Prompt</h3>
+            <div class="form-group">
+              <textarea id="system-prompt" rows="3" placeholder="You are a helpful assistant. Be concise and precise."></textarea>
+              <span class="slider-help">Sets the persistent persona and rules for the AI model.</span>
+            </div>
+          </section>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="btn secondary" id="reset-settings-btn">Reset Defaults</button>
+          <button class="btn primary" id="save-settings-btn">Save Configurations</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main scripts -->
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
