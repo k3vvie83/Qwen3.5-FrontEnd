@@ -18,30 +18,19 @@
     .controls select { cursor: pointer; }
     .controls input[type="number"] { width: 80px; }
 
-    .middle-bar { height: calc(100% - 60px - 56px - 120px); overflow-y: auto; }
+    .middle-bar { height: calc(100% - 60px - 56px - 88px); overflow-y: auto; }
     .chat { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
     .message { max-width: 800px; padding: 12px 16px; border-radius: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
     .message.user { background: #238636; align-self: flex-end; border-bottom-right-radius: 4px; }
     .message.assistant { background: #21262d; align-self: flex-start; border-bottom-left-radius: 4px; }
     .message.error { background: #f85149; color: #fff; align-self: flex-start; }
-    .message .attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .message .attachment-img { max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover; }
 
-    .bottom-bar { height: 120px; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 8px; padding: 12px 24px; }
-    .attach-preview { display: flex; gap: 8px; overflow-x: auto; align-items: center; }
-    .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
-    .attach-thumb img, .attach-thumb video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid #30363d; }
-    .attach-thumb .remove-btn { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; background: #f85149; border: none; border-radius: 50%; color: #fff; font-size: 12px; cursor: pointer; line-height: 18px; text-align: center; }
-    .attach-thumb .remove-btn:hover { background: #ff6b6b; }
-    .input-row { display: flex; gap: 12px; align-items: center; }
-    .input-row textarea { flex: 1; background: #161b22; border: 2px solid #58a6ff; color: #e6edf3; padding: 12px; border-radius: 8px; resize: none; height: 48px; font-size: 0.95rem; line-height: 1.5; }
-    .input-row textarea:focus { outline: none; border-color: #58a6ff; }
-    .input-row button { background: #238636; border: none; color: #fff; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: background 0.2s; }
-    .input-row button:hover { background: #2ea043; }
-    .input-row button:disabled { background: #30363d; cursor: not-allowed; }
-    .attach-btn { background: #21262d; border: 1px solid #30363d; color: #e6edf3; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; transition: background 0.2s; }
-    .attach-btn:hover { background: #30363d; }
-    #file-input { display: none; }
+    .bottom-bar { height: 88px; border-top: 1px solid #30363d; display: flex; gap: 12px; padding: 16px 24px; align-items: center; }
+    .bottom-bar textarea { flex: 1; background: #161b22; border: 2px solid #58a6ff; color: #e6edf3; padding: 12px; border-radius: 8px; resize: none; height: 56px; font-size: 0.95rem; line-height: 1.5; }
+    .bottom-bar textarea:focus { outline: none; border-color: #58a6ff; }
+    .bottom-bar button { background: #238636; border: none; color: #fff; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: background 0.2s; }
+    .bottom-bar button:hover { background: #2ea043; }
+    .bottom-bar button:disabled { background: #30363d; cursor: not-allowed; }
 
     .loading { display: none; color: #8b949e; font-style: italic; padding: 0 24px 8px; }
   </style>
@@ -63,28 +52,20 @@
   </div>
 
   <div class="bottom-bar">
-    <div class="attach-preview" id="attach-preview"></div>
-    <div class="input-row">
-      <button class="attach-btn" id="attach-btn">+ Attach</button>
-      <textarea id="input" placeholder="Ask something... (Enter to send, Shift+Enter for new line)" rows="1"></textarea>
-      <button id="send">Send</button>
-    </div>
+    <textarea id="input" placeholder="Ask something..." rows="1"></textarea>
+    <button id="send">Send</button>
   </div>
-  <input type="file" id="file-input" accept="image/*,video/*" multiple>
 
   <div class="loading" id="loading">Generating response...</div>
 
   <script>
-    const API_URL = '/r/v1/chat/completions';
+    const API_URL = 'r/v1/chat/completions';
 
     const chat = document.getElementById('chat');
     const middleBar = document.getElementById('middle-bar');
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
     const loading = document.getElementById('loading');
-    const attachBtn = document.getElementById('attach-btn');
-    const fileInput = document.getElementById('file-input');
-    const attachPreview = document.getElementById('attach-preview');
 
     const model = document.getElementById('model');
     const temp = document.getElementById('temp');
@@ -94,101 +75,11 @@
     let messages = [];
     let isGenerating = false;
     let abortController = null;
-    let attachments = [];
 
-    attachBtn.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', () => {
-      for (const file of fileInput.files) {
-        const id = Date.now() + Math.random();
-        const url = URL.createObjectURL(file);
-        attachments.push({ id, file, url });
-        renderAttachThumb({ id, file, url });
-      }
-      fileInput.value = '';
-    });
-
-    function renderAttachThumb(att) {
-      const div = document.createElement('div');
-      div.className = 'attach-thumb';
-      div.dataset.id = att.id;
-
-      if (att.file.type.startsWith('video/')) {
-        const vid = document.createElement('video');
-        vid.src = att.url;
-        vid.controls = true;
-        div.appendChild(vid);
-      } else {
-        const img = document.createElement('img');
-        img.src = att.url;
-        div.appendChild(img);
-      }
-
-      const rm = document.createElement('button');
-      rm.className = 'remove-btn';
-      rm.textContent = '×';
-      rm.onclick = () => {
-        URL.revokeObjectURL(att.url);
-        attachments = attachments.filter(a => a.id !== att.id);
-        div.remove();
-      };
-      div.appendChild(rm);
-      attachPreview.appendChild(div);
-    }
-
-    async function buildContent(text, atts) {
-      const parts = [];
-      for (const att of atts) {
-        const base64 = await awaitFileBase64(att.file);
-        if (att.file.type.startsWith('image/')) {
-          parts.push({ type: 'image_url', image_url: { url: `data:${att.file.type};base64,${base64}` } });
-        } else if (att.file.type.startsWith('video/')) {
-          parts.push({ type: 'video_url', video_url: { url: `data:${att.file.type};base64,${base64}` } });
-        }
-      }
-      if (text) parts.push({ type: 'text', text });
-      return parts;
-    }
-
-    function awaitFileBase64(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function addMessage(role, content, atts = []) {
+    function addMessage(role, content) {
       const div = document.createElement('div');
       div.className = `message ${role}`;
-      if (typeof content === 'string') {
-        div.textContent = content;
-      } else {
-        for (const part of content) {
-          if (part.type === 'text') {
-            div.appendChild(document.createTextNode(part.text));
-          } else if (part.type === 'image_url' || part.type === 'video_url') {
-            const url = part.image_url?.url || part.video_url?.url;
-            if (url.startsWith('data:')) {
-              const container = document.createElement('div');
-              container.style.cssText = 'margin-top:8px;';
-              if (url.includes('video')) {
-                const vid = document.createElement('video');
-                vid.src = url;
-                vid.controls = true;
-                vid.style.cssText = 'max-width:300px;max-height:200px;border-radius:8px;';
-                container.appendChild(vid);
-              } else {
-                const img = document.createElement('img');
-                img.src = url;
-                img.className = 'attachment-img';
-                container.appendChild(img);
-              }
-              div.appendChild(container);
-            }
-          }
-        }
-      }
+      div.textContent = content;
       chat.appendChild(div);
       middleBar.scrollTop = middleBar.scrollHeight;
       return div;
@@ -196,20 +87,11 @@
 
     async function send() {
       const text = input.value.trim();
-      if (!text && attachments.length === 0) return;
-      if (isGenerating) return;
+      if (!text || isGenerating) return;
 
-      const atts = [...attachments];
-      const contentParts = await buildContent(text, atts);
-
-      const userMsg = { role: 'user', content: contentParts };
-      messages.push(userMsg);
-      addMessage('user', contentParts, atts);
-
+      messages.push({ role: 'user', content: text });
+      addMessage('user', text);
       input.value = '';
-      for (const att of atts) URL.revokeObjectURL(att.url);
-      attachments = [];
-      attachPreview.innerHTML = '';
 
       isGenerating = true;
       sendBtn.disabled = true;
@@ -241,32 +123,33 @@
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let lineBuffer = '';
+        let buffer = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          lineBuffer += decoder.decode(value, { stream: true });
-          const lines = lineBuffer.split('\n');
-          lineBuffer = lines.pop();
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
 
-          for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line || line === 'data: [DONE]') continue;
-            if (line.startsWith('data: ')) {
-              const jsonStr = line.substring(6);
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === 'data: [DONE]') continue;
+            if (trimmed.startsWith('data: ')) {
               try {
-                const data = JSON.parse(jsonStr);
+                const data = JSON.parse(trimmed.substring(6));
                 const content = data.choices?.[0]?.delta?.content || '';
                 const reasoning = data.choices?.[0]?.delta?.reasoning_content || '';
-                if (content) fullResponse += content;
-                if (reasoning) fullResponse += reasoning;
+                if (content) {
+                  fullResponse += content;
+                }
+                if (reasoning) {
+                  fullResponse += reasoning;
+                }
                 assistantDiv.textContent = fullResponse;
                 middleBar.scrollTop = middleBar.scrollHeight;
-              } catch (e) {
-                // ignore parse errors from partial JSON
-              }
+              } catch (e) {}
             }
           }
         }
