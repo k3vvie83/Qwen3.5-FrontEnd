@@ -51,34 +51,23 @@ const server = http.createServer((req, clientRes) => {
   };
 
   const proxyReq = https.request(options, (proxyRes) => {
+    // Pass through CORS headers from inference (or add our own)
     const responseHeaders = { ...proxyRes.headers };
-    delete responseHeaders['content-length'];
-    delete responseHeaders['content-encoding'];
     Object.entries(CORS_HEADERS).forEach(([k, v]) => {
       if (!responseHeaders[k.toLowerCase()]) {
         responseHeaders[k.toLowerCase()] = v;
       }
     });
+    responseHeaders['cache-control'] = 'no-cache';
+    responseHeaders['x-accel-buffering'] = 'no';
     clientRes.writeHead(proxyRes.statusCode, responseHeaders);
-    proxyRes.on('data', (chunk) => {
-      if (!clientRes.write(chunk)) {
-        proxyRes.pause();
-        clientRes.once('drain', () => proxyRes.resume());
-      }
-    });
-    proxyRes.on('end', () => clientRes.end());
-    proxyRes.on('error', (err) => {
-      console.error('Proxy upstream error:', err.message);
-      if (!clientRes.writableEnded) clientRes.end();
-    });
+    proxyRes.pipe(clientRes);
   });
 
   proxyReq.on('error', (err) => {
-    console.error('Proxy request error:', err.message);
-    if (!clientRes.writableEnded) {
-      clientRes.writeHead(502, { 'Content-Type': 'application/json' });
-      clientRes.end(JSON.stringify({ error: { message: 'Proxy error: ' + err.message } }));
-    }
+    console.error('Proxy error:', err.message);
+    clientRes.writeHead(502, { 'Content-Type': 'application/json' });
+    clientRes.end(JSON.stringify({ error: { message: 'Proxy error: ' + err.message } }));
   });
 
   req.pipe(proxyReq);
