@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qwen Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100%; }
+
+    .top-bar { height: 60px; border-bottom: 1px solid #30363d; display: flex; align-items: center; padding: 0 24px; gap: 16px; }
+    .top-bar h1 { font-size: 1.2rem; color: #58a6ff; }
+
+    .controls { height: 56px; border-bottom: 1px solid #30363d; display: flex; gap: 12px; padding: 0 24px; flex-wrap: wrap; align-items: center; }
+    .controls label { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+    .controls select, .controls input { background: #161b22; border: 1px solid #30363d; color: #e6edf3; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; }
+    .controls select { cursor: pointer; }
+    .controls input[type="number"] { width: 80px; }
+
+    .middle-bar { height: calc(100% - 60px - 56px - 120px); overflow-y: auto; }
+    .chat { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .message { max-width: 800px; padding: 12px 16px; border-radius: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .message.user { background: #238636; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .message.assistant { background: #21262d; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .message.error { background: #f85149; color: #fff; align-self: flex-start; }
+    .message .attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .message .attachment-img { max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover; }
+
+    .bottom-bar { height: 120px; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 8px; padding: 12px 24px; }
+    .attach-preview { display: flex; gap: 8px; overflow-x: auto; align-items: center; }
+    .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; }
+    .attach-thumb img, .attach-thumb video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid #30363d; }
+    .attach-thumb .remove-btn { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; background: #f85149; border: none; border-radius: 50%; color: #fff; font-size: 12px; cursor: pointer; line-height: 18px; text-align: center; }
+    .attach-thumb .remove-btn:hover { background: #ff6b6b; }
+    .input-row { display: flex; gap: 12px; align-items: center; }
+    .input-row textarea { flex: 1; background: #161b22; border: 2px solid #58a6ff; color: #e6edf3; padding: 12px; border-radius: 8px; resize: none; height: 48px; font-size: 0.95rem; line-height: 1.5; }
+    .input-row textarea:focus { outline: none; border-color: #58a6ff; }
+    .input-row button { background: #238636; border: none; color: #fff; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: background 0.2s; }
+    .input-row button:hover { background: #2ea043; }
+    .input-row button:disabled { background: #30363d; cursor: not-allowed; }
+    .attach-btn { background: #21262d; border: 1px solid #30363d; color: #e6edf3; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; transition: background 0.2s; }
+    .attach-btn:hover { background: #30363d; }
+    #file-input { display: none; }
+
+    .loading { display: none; color: #8b949e; font-style: italic; padding: 0 24px 8px; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1>Qwen Chat</h1>
+  </div>
+
+  <div class="controls">
+    <label>Model: <select id="model"><option value="qwen3-5-122b">qwen3-5-122b</option><option value="qwen3-6-35b-a3b">qwen3-6-35b-a3b</option></select></label>
+    <label>Temp: <input type="number" id="temp" value="1.0" min="0" max="2" step="0.1"></label>
+    <label>Max Tokens: <input type="number" id="maxTokens" value="2048" min="1" max="8192"></label>
+    <label>Top P: <input type="number" id="topP" value="0.95" min="0" max="1" step="0.05"></label>
+  </div>
+
+  <div class="middle-bar" id="middle-bar">
+    <div class="chat" id="chat"></div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="attach-preview" id="attach-preview"></div>
+    <div class="input-row">
+      <button class="attach-btn" id="attach-btn">+ Attach</button>
+      <textarea id="input" placeholder="Ask something... (Enter to send, Shift+Enter for new line)" rows="1"></textarea>
+      <button id="send">Send</button>
+    </div>
+  </div>
+  <input type="file" id="file-input" accept="image/*,video/*" multiple>
+
+  <div class="loading" id="loading">Generating response...</div>
+
+  <script>
+    const API_URL = '/r/v1/chat/completions';
+
+    const chat = document.getElementById('chat');
+    const middleBar = document.getElementById('middle-bar');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const loading = document.getElementById('loading');
+    const attachBtn = document.getElementById('attach-btn');
+    const fileInput = document.getElementById('file-input');
+    const attachPreview = document.getElementById('attach-preview');
+
+    const model = document.getElementById('model');
+    const temp = document.getElementById('temp');
+    const maxTokens = document.getElementById('maxTokens');
+    const topP = document.getElementById('topP');
+
+    let messages = [];
+    let isGenerating = false;
+    let abortController = null;
+    let attachments = [];
+
+    attachBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+      for (const file of fileInput.files) {
+        const id = Date.now() + Math.random();
+        const url = URL.createObjectURL(file);
+        attachments.push({ id, file, url });
+        renderAttachThumb({ id, file, url });
+      }
+      fileInput.value = '';
+    });
+
+    function renderAttachThumb(att) {
+      const div = document.createElement('div');
+      div.className = 'attach-thumb';
+      div.dataset.id = att.id;
+
+      if (att.file.type.startsWith('video/')) {
+        const vid = document.createElement('video');
+        vid.src = att.url;
+        vid.controls = true;
+        div.appendChild(vid);
+      } else {
+        const img = document.createElement('img');
+        img.src = att.url;
+        div.appendChild(img);
+      }
+
+      const rm = document.createElement('button');
+      rm.className = 'remove-btn';
+      rm.textContent = '×';
+      rm.onclick = () => {
+        URL.revokeObjectURL(att.url);
+        attachments = attachments.filter(a => a.id !== att.id);
+        div.remove();
+      };
+      div.appendChild(rm);
+      attachPreview.appendChild(div);
+    }
+
+    async function buildContent(text, atts) {
+      const parts = [];
+      for (const att of atts) {
+        const base64 = await awaitFileBase64(att.file);
+        if (att.file.type.startsWith('image/')) {
+          parts.push({ type: 'image_url', image_url: { url: `data:${att.file.type};base64,${base64}` } });
+        } else if (att.file.type.startsWith('video/')) {
+          parts.push({ type: 'video_url', video_url: { url: `data:${att.file.type};base64,${base64}` } });
+        }
+      }
+      if (text) parts.push({ type: 'text', text });
+      return parts;
+    }
+
+    function awaitFileBase64(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function addMessage(role, content, atts = []) {
+      const div = document.createElement('div');
+      div.className = `message ${role}`;
+      if (typeof content === 'string') {
+        div.textContent = content;
+      } else {
+        for (const part of content) {
+          if (part.type === 'text') {
+            div.appendChild(document.createTextNode(part.text));
+          } else if (part.type === 'image_url' || part.type === 'video_url') {
+            const url = part.image_url?.url || part.video_url?.url;
+            if (url.startsWith('data:')) {
+              const container = document.createElement('div');
+              container.style.cssText = 'margin-top:8px;';
+              if (url.includes('video')) {
+                const vid = document.createElement('video');
+                vid.src = url;
+                vid.controls = true;
+                vid.style.cssText = 'max-width:300px;max-height:200px;border-radius:8px;';
+                container.appendChild(vid);
+              } else {
+                const img = document.createElement('img');
+                img.src = url;
+                img.className = 'attachment-img';
+                container.appendChild(img);
+              }
+              div.appendChild(container);
+            }
+          }
+        }
+      }
+      chat.appendChild(div);
+      middleBar.scrollTop = middleBar.scrollHeight;
+      return div;
+    }
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text && attachments.length === 0) return;
+      if (isGenerating) return;
+
+      const atts = [...attachments];
+      const contentParts = await buildContent(text, atts);
+
+      const userMsg = { role: 'user', content: contentParts };
+      messages.push(userMsg);
+      addMessage('user', contentParts, atts);
+
+      input.value = '';
+      for (const att of atts) URL.revokeObjectURL(att.url);
+      attachments = [];
+      attachPreview.innerHTML = '';
+
+      isGenerating = true;
+      sendBtn.disabled = true;
+      loading.style.display = 'block';
+
+      abortController = new AbortController();
+      let fullResponse = '';
+      const assistantDiv = addMessage('assistant', '');
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model.value,
+            messages: messages,
+            max_tokens: parseInt(maxTokens.value),
+            temperature: parseFloat(temp.value),
+            top_p: parseFloat(topP.value),
+            stream: true
+          }),
+          signal: abortController.signal
+        });
+
+        if (!response.ok) {
+          const err = await response.text();
+          throw new Error(`Error ${response.status}: ${err}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let lineBuffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          lineBuffer += decoder.decode(value, { stream: true });
+          const lines = lineBuffer.split('\n');
+          lineBuffer = lines.pop();
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line || line === 'data: [DONE]') continue;
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.substring(6);
+              try {
+                const data = JSON.parse(jsonStr);
+                const content = data.choices?.[0]?.delta?.content || '';
+                const reasoning = data.choices?.[0]?.delta?.reasoning_content || '';
+                if (content) fullResponse += content;
+                if (reasoning) fullResponse += reasoning;
+                assistantDiv.textContent = fullResponse;
+                middleBar.scrollTop = middleBar.scrollHeight;
+              } catch (e) {
+                // ignore parse errors from partial JSON
+              }
+            }
+          }
+        }
+
+        messages.push({ role: 'assistant', content: fullResponse });
+
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          assistantDiv.textContent = fullResponse + '\n[Stopped]';
+        } else {
+          console.error('Fetch error details:', err);
+          let errorDetail = err.message;
+          if (err.cause) errorDetail += ' | cause: ' + (err.cause.message || JSON.stringify(err.cause));
+          if (err.name) errorDetail += ' | type: ' + err.name;
+          assistantDiv.textContent = `Error: ${errorDetail}\nURL: ${API_URL}\nStack: ${err.stack}`;
+          assistantDiv.className = 'message error';
+        }
+      } finally {
+        isGenerating = false;
+        sendBtn.disabled = false;
+        loading.style.display = 'none';
+        abortController = null;
+      }
+    }
+
+    sendBtn.addEventListener('click', send);
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 200) + 'px';
+    });
+  </script>
+</body>
+</html>
